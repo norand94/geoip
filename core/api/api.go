@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"github.com/norand94/geoip/core/config"
 	"io/ioutil"
@@ -15,6 +14,9 @@ import (
 const SourceApi = "api"
 const SourceCache = "cache"
 
+var instalnce *service = nil
+
+//Сервис, отправляющий запросы к ip
 type service struct {
 	Conf        *config.Config
 	RConn       redis.Conn
@@ -24,7 +26,14 @@ type service struct {
 	currProvNum uint
 }
 
-func New(conf *config.Config, conn redis.Conn) *service {
+func GetInstance(conf *config.Config, conn redis.Conn) *service {
+	if instalnce == nil {
+		instalnce = newService(conf, conn)
+	}
+	return instalnce
+}
+
+func newService(conf *config.Config, conn redis.Conn) *service {
 	api := new(service)
 	api.Conf = conf
 	api.RConn = conn
@@ -46,18 +55,19 @@ func New(conf *config.Config, conn redis.Conn) *service {
 	return api
 }
 
+// Провайдер geoip
 type provider struct {
 	limitReq       int
 	name           string
-	currReqCounter int
-	period         time.Duration
-	apiUrl         string
+	currReqCounter int //Счетчик запросов к нему за данный период
+	apiUrl         string //url, по которому можно получить информацию о ip
 }
 
+//Chains - каналы, по которым приложение общается с api-сервисом
 type Chans struct {
-	ProvReq ProvReq
-	ReqCh   chan Request
-	QuitCh  chan struct{}
+	ProvReq ProvReq //Запрос на получение информации о провайдерах
+	ReqCh   chan Request //Запрос на получение информации о ip
+	QuitCh  chan struct{} // Запрос на остановку сервиса
 }
 
 type Request struct {
@@ -66,12 +76,13 @@ type Request struct {
 }
 
 type Response struct {
-	City   string `json:"city"`
+	City   interface{} `json:"city"`
 	ReqNum int    `json:"reqNum"`
 	Source string `json:"source"`
 	Error  error  `json:"error"`
 }
 
+//Канал запроса на получение информации о провайдерах
 type ProvReq chan chan ProvStats
 
 type ProvStats struct {
@@ -84,20 +95,20 @@ type ProvStat struct {
 	CurrReqCounter int
 }
 
-type httpResp struct {
-	City string `json:"city"`
-}
-
+// Start - запускает сервис
 func (api *service) Start() Chans {
 	ticker := time.After(time.Duration(api.Conf.PeriodMin) * time.Minute)
 	go func(reqCh <-chan Request, quitCh <-chan struct{}) {
 		for {
 			select {
+
+			// Событие <-ticker - обнуляет статистику по провайдерам
 			case <-ticker:
 				for i := range api.provs {
 					api.provs[i].currReqCounter = 0
 				}
 
+			// out := <-api.chans.ProvReq - Отдает статистику по провайдерам
 			case out := <-api.chans.ProvReq:
 				st := ProvStats{CurrProvName: api.currProv.name}
 				for _, v := range api.provs {
@@ -108,12 +119,13 @@ func (api *service) Start() Chans {
 				}
 				out <- st
 
+			// req := <-reqCh - Отдает информацию об ip
 			case req := <-reqCh:
 				api.currProv.currReqCounter++
 				if api.currProv.currReqCounter >= api.currProv.limitReq {
 					api.nextProvider()
 				}
-				go api.processReq(req, api.currProv)
+				go api.processReq(&req, api.currProv)
 
 			case <-quitCh:
 				return
@@ -125,32 +137,44 @@ func (api *service) Start() Chans {
 }
 
 func (api *service) nextProvider() {
-	api.currProv.currReqCounter = 0
-	api.currProv = api.provs[(api.currProvNum+1)%uint(len(api.provs))]
+	if api.Conf.ResetPrevProvider {
+		api.currProv.currReqCounter = 0
+	} 
+
+	api.currProvNum++
+	if api.currProvNum >= uint(len(api.provs)) {
+		api.currProvNum = 0
+	}
+	api.currProv = api.provs[api.currProvNum]
 }
 
-func (api *service) processReq(req Request, prov *provider) {
+
+// processReq - обрабатывает запрос от приложения
+// Отправляет запрос на внешние geoip сервисы, разбирает их ответ,
+// кладет его в кеш и отправляет назад в response информацию об ip
+func (api *service) processReq(req *Request, prov *provider) {
 	url := strings.Replace(prov.apiUrl, "{ip}", req.Ip, 1)
-	fmt.Println(url)
 	resp, err := http.Get(url)
 	if err != nil {
-		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: SourceApi}
+		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: prov.name}
 		return
 	}
 	defer resp.Body.Close()
 
 	bts, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: SourceApi}
+		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: prov.name}
 		return
 	}
 	key := "ip:" + req.Ip
 	api.RConn.Do("HSET", key, "resp", bts)
 
-	r := httpResp{}
+	r := struct {
+		City interface{} `json:"city"`
+	}{}
 	err = json.Unmarshal(bts, &r)
 	if err != nil {
-		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: SourceApi}
+		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: prov.name}
 		return
 	}
 
@@ -160,5 +184,5 @@ func (api *service) processReq(req Request, prov *provider) {
 		log.Println("Redis error: ", err)
 	}
 
-	req.ResponseCh <- Response{City: r.City, ReqNum: prov.currReqCounter, Source: SourceApi}
+	req.ResponseCh <- Response{City: r.City, ReqNum: prov.currReqCounter, Source: prov.name}
 }

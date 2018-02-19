@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum-1.8.0/log"
 	"github.com/norand94/geoip/core"
 	"github.com/norand94/geoip/core/config"
 	"io/ioutil"
+	"log"
 )
 
 func main() {
@@ -19,7 +19,7 @@ func main() {
 	fmt.Printf("Config: \n %+v \n", conf)
 
 	if len(conf.Providers) == 0 {
-		log.Error("Не указаны провайдеры!")
+		log.Fatal("Не указаны провайдеры!")
 		return
 	}
 

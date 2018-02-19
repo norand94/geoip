@@ -21,6 +21,7 @@ func NewApp(conf *config.Config) *app {
 	return app
 }
 
+// Run - Инициализирует модули и запускает приложение
 func (a *app) Run() {
 	conn, err := redis.Dial("tcp", a.Conf.DB.Address)
 	if err != nil {
@@ -30,7 +31,8 @@ func (a *app) Run() {
 	defer conn.Close()
 	a.RConn = conn
 
-	api := api.New(a.Conf, conn)
+	//инициализация api-сервиса
+	api := api.GetInstance(a.Conf, conn)
 	a.apiChans = api.Start()
 
 	r := gin.Default()

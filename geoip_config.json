@@ -2,16 +2,17 @@
   "periodMin" : 1,
   "expiredIpInfoSec" : "3600",
   "httpPort" : ":8080",
+  "resetPrevProvider" : false,
   "providers": [
     {
     "name": "freegeoip.net",
     "apiUrl": "http://freegeoip.net/json/{ip}",
-    "limitReqCount": 5
+    "limitReqCount": 3
     },
     {
       "name": "geoip.nekudo.com",
       "apiUrl": "http://geoip.nekudo.com/api/{ip}",
-      "limitReqCount": 5
+      "limitReqCount": 3
     }
   ],
   "db": {
