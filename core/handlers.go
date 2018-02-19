@@ -1,12 +1,10 @@
 package core
 
 import (
-	"github.com/ethereum/go-ethereum-1.8.0/log"
-
-	"github.com/norand94/geoip/core/api"
-	"strings"
 	"github.com/gin-gonic/gin"
-
+	"github.com/norand94/geoip/core/api"
+	"log"
+	"strings"
 )
 
 func (a *app) myIpHandler(c *gin.Context) {
@@ -14,9 +12,9 @@ func (a *app) myIpHandler(c *gin.Context) {
 	resp := a.processIp(ip)
 
 	if resp.Error != nil {
-		log.Error(resp.Error.Error())
+		log.Println(resp.Error.Error())
 		c.JSON(500, gin.H{
-			"error" : "internal server error",
+			"error": "internal server error",
 		})
 	}
 
@@ -28,9 +26,9 @@ func (a *app) ipHandler(c *gin.Context) {
 	resp := a.processIp(ip)
 
 	if resp.Error != nil {
-		log.Error(resp.Error.Error())
+		log.Println(resp.Error.Error())
 		c.JSON(500, gin.H{
-			"error" : "internal server error",
+			"error": "internal server error",
 		})
 	}
 
@@ -39,9 +37,9 @@ func (a *app) ipHandler(c *gin.Context) {
 
 func (a *app) processIp(ip string) api.Response {
 
-	cityBts, err := a.RConn.Do("HGET", "ip:"+ip, "sity")
+	cityBts, err := a.RConn.Do("HGET", "ip:"+ip, "city")
 	if err != nil {
-		log.Error(err.Error())
+		log.Println(err.Error())
 		return a.getResponseFromApi(ip)
 	}
 
@@ -52,7 +50,7 @@ func (a *app) processIp(ip string) api.Response {
 	return api.Response{City: string(cityBts.([]byte)), Source: api.SourceCache}
 }
 
-func (a *app) getResponseFromApi(ip string) api.Response  {
+func (a *app) getResponseFromApi(ip string) api.Response {
 	respChan := make(chan api.Response, 1)
 	a.apiChans.ReqCh <- api.Request{
 		Ip:         ip,

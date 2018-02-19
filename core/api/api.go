@@ -6,6 +6,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"github.com/norand94/geoip/core/config"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -86,7 +87,7 @@ func (api *service) Start() Chans {
 				if api.currProv.currReqCounter >= api.currProv.limitReq {
 					api.nextProvider()
 				}
-				go processReq(req, api.currProv)
+				go api.processReq(req, api.currProv)
 
 			case <-quitCh:
 				return
@@ -102,7 +103,7 @@ func (api *service) nextProvider() {
 	api.currProv = api.provs[(api.currProvNum+1)%uint(len(api.provs))]
 }
 
-func processReq(req Request, prov *provider) {
+func (api *service) processReq(req Request, prov *provider) {
 	url := strings.Replace(prov.apiUrl, "{ip}", req.Ip, 1)
 	fmt.Println(url)
 	resp, err := http.Get(url)
@@ -121,10 +122,16 @@ func processReq(req Request, prov *provider) {
 
 	r := httpResp{}
 	err = json.Unmarshal(bts, &r)
-	fmt.Println(r)
 	if err != nil {
 		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: SourceApi}
 		return
+	}
+
+	key := "ip:" + req.Ip
+	_, rerr := api.RConn.Do("HSET", key, "city", r.City)
+	_, rerr = api.RConn.Do("EXPIRE", key, api.Conf.ExpiredIpInfoSec)
+	if rerr != nil {
+		log.Println("Redis error: ", err)
 	}
 
 	req.ResponseCh <- Response{City: r.City, ReqNum: prov.currReqCounter, Source: SourceApi}

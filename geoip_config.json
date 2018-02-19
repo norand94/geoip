@@ -1,4 +1,5 @@
 {
+  "expiredIpInfoSec" : "100",
   "httpPort" : ":8080",
   "providers": [
     {

@@ -2,7 +2,7 @@ package config
 
 type Config struct {
 	HttpPort         string `json:"httpPort"`
-	ExpiredIpInfoSec int64  `json:"expiredIpInfo"`
+	ExpiredIpInfoSec string `json:"expiredIpInfoSec"`
 	PeriodMin        int64  `json:"period"`
 
 	Providers []Provider `json:"providers"`

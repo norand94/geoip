@@ -2,11 +2,11 @@ package core
 
 import (
 	"github.com/garyburd/redigo/redis"
+	"github.com/gin-gonic/gin"
 	"github.com/norand94/geoip/core/api"
 	"github.com/norand94/geoip/core/config"
 	"log"
 	"net/http"
-	"github.com/gin-gonic/gin"
 )
 
 type app struct {
@@ -37,7 +37,6 @@ func (a *app) Run() {
 
 	r.GET("/myip", a.myIpHandler)
 	r.GET("/ip/:ip", a.ipHandler)
-
 
 	http.Handle("/", r)
 
