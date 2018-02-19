@@ -1,6 +1,17 @@
 {
   "httpPort" : ":8080",
-  "providers": [{}],
+  "providers": [
+    {
+    "name": "freegeoip.net",
+    "apiUrl": "http://freegeoip.net/json/{ip}",
+    "limitReqCount": 5
+    },
+    {
+      "name": "geoip.nekudo.com",
+      "apiUrl": "http://geoip.nekudo.com/api/{ip}",
+      "limitReqCount": 5
+    }
+  ],
   "db": {
     "dbNum" : "0",
     "address": ":6379"

@@ -1,14 +1,26 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"github.com/norand94/geoip/core/config"
+	"io/ioutil"
+	"net/http"
+	"strings"
+	"time"
 )
 
+const SourceApi = "api"
+const SourceCache = "cache"
+
 type service struct {
-	Conf  *config.Config
-	RConn redis.Conn
-	chans Chans
+	Conf        *config.Config
+	RConn       redis.Conn
+	chans       Chans
+	provs       []*provider
+	currProv    *provider
+	currProvNum uint
 }
 
 func New(conf *config.Config, conn redis.Conn) *service {
@@ -18,7 +30,24 @@ func New(conf *config.Config, conn redis.Conn) *service {
 
 	api.chans.ReqCh = make(chan Request, 10)
 	api.chans.QuitCh = make(chan struct{}, 1)
+
+	for _, v := range conf.Providers {
+		api.provs = append(api.provs, &provider{
+			limitReq: v.LimitReqCount,
+			apiUrl:   v.ApiUrl,
+		})
+	}
+
+	api.currProv = api.provs[0]
+
 	return api
+}
+
+type provider struct {
+	limitReq       int
+	currReqCounter int
+	period         time.Duration
+	apiUrl         string
 }
 
 type Chans struct {
@@ -32,22 +61,32 @@ type Request struct {
 }
 
 type Response struct {
-	Sity   string
-	ReqNum int
-	Error  error
+	City   string `json:"city"`
+	ReqNum int    `json:"reqNum"`
+	Source string `json:"source"`
+	Error  error  `json:"error"`
 }
 
+type httpResp struct {
+	City string `json:"city"`
+}
 
 func (api *service) Start() Chans {
+	ticker := time.After(time.Duration(api.Conf.PeriodMin) * time.Minute)
 	go func(reqCh <-chan Request, quitCh <-chan struct{}) {
 		for {
 			select {
-			case req := <-reqCh:
-				sityBts, err := api.RConn.Do("HGET", "ip:" + req.Ip, "sity")
-				if err != nil {
-					req.ResponseCh <- Response{Error: err}
+			case <-ticker:
+				for i := range api.provs {
+					api.provs[i].currReqCounter = 0
 				}
-				req.ResponseCh <- Response{Sity: string(sityBts.([]byte))}
+
+			case req := <-reqCh:
+				api.currProv.currReqCounter++
+				if api.currProv.currReqCounter >= api.currProv.limitReq {
+					api.nextProvider()
+				}
+				go processReq(req, api.currProv)
 
 			case <-quitCh:
 				return
@@ -56,4 +95,37 @@ func (api *service) Start() Chans {
 	}(api.chans.ReqCh, api.chans.QuitCh)
 
 	return api.chans
+}
+
+func (api *service) nextProvider() {
+	api.currProv.currReqCounter = 0
+	api.currProv = api.provs[(api.currProvNum+1)%uint(len(api.provs))]
+}
+
+func processReq(req Request, prov *provider) {
+	url := strings.Replace(prov.apiUrl, "{ip}", req.Ip, 1)
+	fmt.Println(url)
+	resp, err := http.Get(url)
+	if err != nil {
+		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: SourceApi}
+		return
+	}
+	defer resp.Body.Close()
+
+	bts, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: SourceApi}
+		return
+	}
+	fmt.Println("HttpResp: ", string(bts))
+
+	r := httpResp{}
+	err = json.Unmarshal(bts, &r)
+	fmt.Println(r)
+	if err != nil {
+		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: SourceApi}
+		return
+	}
+
+	req.ResponseCh <- Response{City: r.City, ReqNum: prov.currReqCounter, Source: SourceApi}
 }

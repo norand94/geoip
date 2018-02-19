@@ -1,9 +1,10 @@
 package config
 
-import "time"
-
 type Config struct {
-	HttpPort string `json:"httpPort"`
+	HttpPort         string `json:"httpPort"`
+	ExpiredIpInfoSec int64  `json:"expiredIpInfo"`
+	PeriodMin        int64  `json:"period"`
+
 	Providers []Provider `json:"providers"`
 	DB        Database   `json:"db"`
 }
@@ -14,8 +15,7 @@ type Database struct {
 }
 
 type Provider struct {
-	Name          string        `json:"name"`
-	Url           string        `json:"url"`
-	Period        time.Duration `json:"period"`
-	LimitReqCount int           `json:"limitReqCount"`
+	Name          string `json:"name"`
+	ApiUrl        string `json:"apiUrl"`
+	LimitReqCount int    `json:"limitReqCount"`
 }

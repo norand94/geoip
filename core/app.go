@@ -2,15 +2,16 @@ package core
 
 import (
 	"github.com/garyburd/redigo/redis"
-	"github.com/norand94/geoip/core/config"
-	"net/http"
 	"github.com/norand94/geoip/core/api"
+	"github.com/norand94/geoip/core/config"
 	"log"
+	"net/http"
+	"github.com/gin-gonic/gin"
 )
 
 type app struct {
-	Conf  *config.Config
-	RConn redis.Conn
+	Conf     *config.Config
+	RConn    redis.Conn
 	apiChans api.Chans
 }
 
@@ -32,7 +33,14 @@ func (a *app) Run() {
 	api := api.New(a.Conf, conn)
 	a.apiChans = api.Start()
 
-	http.HandleFunc("/my", a.myHandler)
+	r := gin.Default()
+
+	r.GET("/myip", a.myIpHandler)
+	r.GET("/ip/:ip", a.ipHandler)
+
+
+	http.Handle("/", r)
+
 	log.Println("geoip started")
 	log.Fatalln(http.ListenAndServe(a.Conf.HttpPort, nil))
 }
