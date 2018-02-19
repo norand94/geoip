@@ -59,14 +59,14 @@ func newService(conf *config.Config, conn redis.Conn) *service {
 type provider struct {
 	limitReq       int
 	name           string
-	currReqCounter int //Счетчик запросов к нему за данный период
+	currReqCounter int    //Счетчик запросов к нему за данный период
 	apiUrl         string //url, по которому можно получить информацию о ip
 }
 
 //Chains - каналы, по которым приложение общается с api-сервисом
 type Chans struct {
-	ProvReq ProvReq //Запрос на получение информации о провайдерах
-	ReqCh   chan Request //Запрос на получение информации о ip
+	ProvReq ProvReq       //Запрос на получение информации о провайдерах
+	ReqCh   chan Request  //Запрос на получение информации о ip
 	QuitCh  chan struct{} // Запрос на остановку сервиса
 }
 
@@ -77,9 +77,9 @@ type Request struct {
 
 type Response struct {
 	City   interface{} `json:"city"`
-	ReqNum int    `json:"reqNum"`
-	Source string `json:"source"`
-	Error  error  `json:"error"`
+	ReqNum int         `json:"reqNum"`
+	Source string      `json:"source"`
+	Error  error       `json:"error"`
 }
 
 //Канал запроса на получение информации о провайдерах
@@ -110,14 +110,17 @@ func (api *service) Start() Chans {
 
 			// out := <-api.chans.ProvReq - Отдает статистику по провайдерам
 			case out := <-api.chans.ProvReq:
-				st := ProvStats{CurrProvName: api.currProv.name}
-				for _, v := range api.provs {
-					st.Stats = append(st.Stats, ProvStat{
-						Name:           v.name,
-						CurrReqCounter: v.currReqCounter,
-					})
-				}
-				out <- st
+				func() {
+					defer close(out)
+					st := ProvStats{CurrProvName: api.currProv.name}
+					for _, v := range api.provs {
+						st.Stats = append(st.Stats, ProvStat{
+							Name:           v.name,
+							CurrReqCounter: v.currReqCounter,
+						})
+					}
+					out <- st
+				}()
 
 			// req := <-reqCh - Отдает информацию об ip
 			case req := <-reqCh:
@@ -139,7 +142,7 @@ func (api *service) Start() Chans {
 func (api *service) nextProvider() {
 	if api.Conf.ResetPrevProvider {
 		api.currProv.currReqCounter = 0
-	} 
+	}
 
 	api.currProvNum++
 	if api.currProvNum >= uint(len(api.provs)) {
@@ -148,11 +151,11 @@ func (api *service) nextProvider() {
 	api.currProv = api.provs[api.currProvNum]
 }
 
-
 // processReq - обрабатывает запрос от приложения
 // Отправляет запрос на внешние geoip сервисы, разбирает их ответ,
 // кладет его в кеш и отправляет назад в response информацию об ip
 func (api *service) processReq(req *Request, prov *provider) {
+	defer close(req.ResponseCh)
 	url := strings.Replace(prov.apiUrl, "{ip}", req.Ip, 1)
 	resp, err := http.Get(url)
 	if err != nil {
