@@ -35,6 +35,12 @@ func (a *app) ipHandler(c *gin.Context) {
 	c.JSON(200, resp)
 }
 
+func (a *app) provStatHandler(c *gin.Context) {
+	provCh := make(chan api.ProvStats)
+	a.apiChans.ProvReq <- provCh
+	c.JSON(200, <-provCh)
+}
+
 func (a *app) processIp(ip string) api.Response {
 
 	cityBts, err := a.RConn.Do("HGET", "ip:"+ip, "city")

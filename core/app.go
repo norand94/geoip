@@ -37,6 +37,7 @@ func (a *app) Run() {
 
 	r.GET("/myip", a.myIpHandler)
 	r.GET("/ip/:ip", a.ipHandler)
+	r.GET("/provStat", a.provStatHandler)
 
 	http.Handle("/", r)
 

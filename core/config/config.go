@@ -3,7 +3,7 @@ package config
 type Config struct {
 	HttpPort         string `json:"httpPort"`
 	ExpiredIpInfoSec string `json:"expiredIpInfoSec"`
-	PeriodMin        int64  `json:"period"`
+	PeriodMin        int64  `json:"periodMin"`
 
 	Providers []Provider `json:"providers"`
 	DB        Database   `json:"db"`

@@ -1,5 +1,6 @@
 {
-  "expiredIpInfoSec" : "100",
+  "periodMin" : 1,
+  "expiredIpInfoSec" : "3600",
   "httpPort" : ":8080",
   "providers": [
     {

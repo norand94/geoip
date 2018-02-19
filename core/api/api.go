@@ -29,6 +29,7 @@ func New(conf *config.Config, conn redis.Conn) *service {
 	api.Conf = conf
 	api.RConn = conn
 
+	api.chans.ProvReq = make(ProvReq)
 	api.chans.ReqCh = make(chan Request, 10)
 	api.chans.QuitCh = make(chan struct{}, 1)
 
@@ -36,6 +37,7 @@ func New(conf *config.Config, conn redis.Conn) *service {
 		api.provs = append(api.provs, &provider{
 			limitReq: v.LimitReqCount,
 			apiUrl:   v.ApiUrl,
+			name:     v.Name,
 		})
 	}
 
@@ -46,14 +48,16 @@ func New(conf *config.Config, conn redis.Conn) *service {
 
 type provider struct {
 	limitReq       int
+	name           string
 	currReqCounter int
 	period         time.Duration
 	apiUrl         string
 }
 
 type Chans struct {
-	ReqCh  chan Request
-	QuitCh chan struct{}
+	ProvReq ProvReq
+	ReqCh   chan Request
+	QuitCh  chan struct{}
 }
 
 type Request struct {
@@ -66,6 +70,18 @@ type Response struct {
 	ReqNum int    `json:"reqNum"`
 	Source string `json:"source"`
 	Error  error  `json:"error"`
+}
+
+type ProvReq chan chan ProvStats
+
+type ProvStats struct {
+	CurrProvName string
+	Stats        []ProvStat
+}
+
+type ProvStat struct {
+	Name           string
+	CurrReqCounter int
 }
 
 type httpResp struct {
@@ -81,6 +97,16 @@ func (api *service) Start() Chans {
 				for i := range api.provs {
 					api.provs[i].currReqCounter = 0
 				}
+
+			case out := <-api.chans.ProvReq:
+				st := ProvStats{CurrProvName: api.currProv.name}
+				for _, v := range api.provs {
+					st.Stats = append(st.Stats, ProvStat{
+						Name:           v.name,
+						CurrReqCounter: v.currReqCounter,
+					})
+				}
+				out <- st
 
 			case req := <-reqCh:
 				api.currProv.currReqCounter++
@@ -118,7 +144,8 @@ func (api *service) processReq(req Request, prov *provider) {
 		req.ResponseCh <- Response{Error: err, ReqNum: prov.currReqCounter, Source: SourceApi}
 		return
 	}
-	fmt.Println("HttpResp: ", string(bts))
+	key := "ip:" + req.Ip
+	api.RConn.Do("HSET", key, "resp", bts)
 
 	r := httpResp{}
 	err = json.Unmarshal(bts, &r)
@@ -127,7 +154,6 @@ func (api *service) processReq(req Request, prov *provider) {
 		return
 	}
 
-	key := "ip:" + req.Ip
 	_, rerr := api.RConn.Do("HSET", key, "city", r.City)
 	_, rerr = api.RConn.Do("EXPIRE", key, api.Conf.ExpiredIpInfoSec)
 	if rerr != nil {
