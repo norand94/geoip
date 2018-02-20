@@ -8,7 +8,7 @@ type Config struct {
 	ExpiredIpInfoSec string `json:"expiredIpInfoSec"`
 
 	//Период, в течении которого статистика по провайдерам обнуляется
-	PeriodMin int64 `json:"periodMin"`
+	PeriodSec int64 `json:"periodSec"`
 
 	//Флаг, указывающий, надо ли сбрасывать статистику по предыдущему провайдеру при переключении
 	ResetPrevProvider bool `json:"resetPrevProvider"`

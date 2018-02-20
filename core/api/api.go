@@ -97,7 +97,7 @@ type ProvStat struct {
 
 // Start - запускает сервис
 func (api *service) Start() Chans {
-	ticker := time.After(time.Duration(api.Conf.PeriodMin) * time.Minute)
+	ticker := time.Tick(time.Duration(api.Conf.PeriodSec) * time.Second)
 	go func(reqCh <-chan Request, quitCh <-chan struct{}) {
 		for {
 			select {
